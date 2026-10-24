@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Restaurant Assistant</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <header>
+            <h2>🍽️ Smart Restaurant Assistant</h2>
+        </header>
+        
+        <div class="chat-box" id="chat-box">
+            <div class="message ai-message">
+                Hello! I'm your restaurant assistant. Ask me what's on the menu for today, tomorrow, or yesterday!
+            </div>
+        </div>
+
+        <form class="input-area" id="chat-form">
+            <input type="text" id="user-input" placeholder="Ask about breakfast, lunch, or dinner..." required autocomplete="off">
+            <button type="submit" id="send-btn">Send</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('user-input');
+        const chatBox = document.getElementById('chat-box');
+        const sendBtn = document.getElementById('send-btn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = input.value.trim();
+            if (!message) return;
+
+            // 1. Show user message
+            appendMessage(message, 'user-message');
+            input.value = '';
+            
+            // 2. Disable input while waiting
+            input.disabled = true;
+            sendBtn.disabled = true;
+
+            // 3. Add temporary loading message
+            const loadingId = 'loading-' + Date.now();
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message ai-message';
+            loadingDiv.id = loadingId;
+            loadingDiv.innerHTML = '<i>Thinking...</i>';
+            chatBox.appendChild(loadingDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                // 4. Send to backend
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+                
+                // 5. Remove loading, add actual reply
+                document.getElementById(loadingId).remove();
+                appendMessage(data.reply, 'ai-message');
+
+            } catch (error) {
+                document.getElementById(loadingId).remove();
+                appendMessage("Sorry, I couldn't connect to the server.", 'ai-message');
+            } finally {
+                // Re-enable input
+                input.disabled = false;
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        });
+
+        function appendMessage(text, className) {
+            const div = document.createElement('div');
+            div.className = `message ${className}`;
+            div.textContent = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to bottom
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# Environment variables (NEVER push this)
+.env
+
+# Mac system files
+.DS_Storegit init
