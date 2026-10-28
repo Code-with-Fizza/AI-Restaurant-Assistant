@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { ChatOllama } from "@langchain/ollama";
 import { createAgent } from "langchain"; 
 import { tool } from "@langchain/core/tools";
+import { getJson } from "serpapi";
 import { z } from "zod";
 
 dotenv.config();
@@ -61,40 +62,76 @@ const getMenuTool = tool(
   }
 );
 
+
+// Tool B: Web Search (SerpAPI using Bing)
+const searchWebTool = tool(
+    async ({ query }) => {
+console.log(`🌐 [WEB SEARCH] Searching for: ${query}`);
+try{
+     const response = await getJson({
+        engine: "bing",
+        q: query,
+        api_key: process.env.SERPAPI_API_KEY,
+     });
+           // Extract the top 3 results to give to the AI
+ if(response.organic_results && response.organic_results.length > 0){
+        const topResults = response.organic_results.slice(0, 3).map((r) => {
+          return `Title: ${r.title}\nSnippet: ${r.snippet}`;
+        }).join("\n\n");
+        return topResults;
+    }
+      return "No search results found.";
+    } catch (error) {
+      console.error("SerpAPI Error:", error);
+      return "Failed to search the web.";
+    }
+  },
+     {
+    name: "search_web",
+    description: "Useful for answering questions about current events, nutrition facts, recipes, or anything not on the restaurant menu.",
+    schema: z.object({
+      query: z.string().describe("The search query to look up on the web"),
+    }),
+  }
+);
+  
+
 // 3. Create the Agent
 const agent = createAgent({
   model: model,
-  tools: [getMenuTool],
-systemPrompt: "You are a helpful restaurant assistant. If the user says hello or makes small talk, answer them politely. If they ask about the menu, use the get_menu tool. Keep answers short."});
+  tools: [getMenuTool, searchWebTool],
+  systemPrompt: `You are a helpful restaurant assistant. 
+  RULE 1: If the user asks what is on the menu (breakfast, lunch, dinner), use the get_menu tool.
+  RULE 2: If the user asks for calories, nutrition, recipes, or general facts, you MUST use the search_web tool. 
+  Never say "I don't know" or "check the menu" if you haven't used the search_web tool yet.`,
+});
 
 // 4. Chat Endpoint (UNCOMMENTED)
 app.post("/api/chat", async (req, res) => {
+  console.log("\n-----------------------------------------");
+  console.log("🔥 [NEW REQUEST] Browser sent a message!");
+  
   try {
     const { message } = req.body;
-    
-    if (!message) {
-        return res.status(400).json({ error: "Message is required" });
-    }
-
-    console.log("User asked:", message);
+    console.log("📩 User asked:", message);
 
     const result = await agent.invoke({
       messages: [{ role: "user", content: message }],
     });
 
     const aiReply = result.messages[result.messages.length - 1].content;
-    console.log("AI replied:", aiReply);
-
+    
+    console.log("✅ AI replied:", aiReply);
+    console.log("-----------------------------------------\n");
+    
     res.json({ reply: aiReply });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Something went wrong." });
+    console.error("❌ [AGENT ERROR]:", error); 
+    res.status(500).json({ reply: "Something went wrong." });
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Hello World! fizza ====")
-})
+
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`🚀 Server is running on port ${port}`);
