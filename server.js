@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import { MemorySaver } from "@langchain/langgraph"; // <-- Add this!
 import path from "path";
 import { fileURLToPath } from "url";
 import { ChatOllama } from "@langchain/ollama";
@@ -95,15 +96,20 @@ try{
   }
 );
   
+// 1. Initialize the memory saver
+const memory = new MemorySaver();
 
 // 3. Create the Agent
+// 2. Pass it to the agent using 'checkpointer'
 const agent = createAgent({
   model: model,
   tools: [getMenuTool, searchWebTool],
+  checkpointer: memory,
   systemPrompt: `You are a helpful restaurant assistant. 
-  RULE 1: If the user asks what is on the menu (breakfast, lunch, dinner), use the get_menu tool.
-  RULE 2: If the user asks for calories, nutrition, recipes, or general facts, you MUST use the search_web tool. 
-  Never say "I don't know" or "check the menu" if you haven't used the search_web tool yet.`,
+  If the user asks about the menu (breakfast, lunch, dinner), ALWAYS use the get_menu tool.
+  If the user asks for nutrition, calories, or recipes, ALWAYS use the search_web tool.
+  
+  IMPORTANT: Never print raw JSON or tool calls in your final answer to the user. Always write a normal sentence.`,
 });
 
 // 4. Chat Endpoint (UNCOMMENTED)
@@ -117,7 +123,12 @@ app.post("/api/chat", async (req, res) => {
 
     const result = await agent.invoke({
       messages: [{ role: "user", content: message }],
-    });
+    },
+{
+        // THIS IS HOW WE ENABLE MEMORY
+        configurable: { thread_id: "user-123" }, 
+      }
+);
 
     const aiReply = result.messages[result.messages.length - 1].content;
     
